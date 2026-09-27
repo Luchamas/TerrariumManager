@@ -1,0 +1,217 @@
+/* Catálogo Rápido pages: the live preview in the app, and the copy of it that's printed to PDF.
+   Everything is scoped under .catalog-doc so it can't clash with the app's own styles. */
+@font-face { font-family: 'Fraunces'; font-weight: 400; src: url(fonts/fraunces-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Fraunces'; font-weight: 600; src: url(fonts/fraunces-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Figtree'; font-weight: 300 900; src: url(fonts/figtree-latin-wght-normal.woff2) format('woff2'); }
+
+@page { size: A4 portrait; margin: 0; }
+@page wide { size: A4 landscape; margin: 0; }
+
+.catalog-doc {
+  --page-w: 210mm;
+  --page-h: 297mm;
+  --pad: 14mm;
+  --scale: 1;
+  --name-size: 15px;
+  --price-size: 17px;
+  --c-page: #FFFFFF;
+  --c-text: #1B2420;
+  --c-heading: #1F3A2E;
+  --c-accent: #2E6340;
+  --c-soft: #E3EFE5;
+  --c-muted: color-mix(in srgb, var(--c-text) 62%, var(--c-page));
+  --c-line: color-mix(in srgb, var(--c-text) 16%, var(--c-page));
+  --f-head: 'Fraunces', Georgia, serif;
+  --w-head: 600;
+  --f-body: 'Figtree', 'Segoe UI', sans-serif;
+  color-scheme: light;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.catalog-doc *, .catalog-doc *::before, .catalog-doc *::after { box-sizing: border-box; }
+
+/* ---- options ---- */
+.catalog-doc.orient-landscape { --page-w: 297mm; --page-h: 210mm; }
+.catalog-doc.orient-landscape .cat-page { page: wide; }
+.catalog-doc.margins-narrow { --pad: 9mm; }
+.catalog-doc.margins-wide { --pad: 20mm; }
+.catalog-doc.cols-2 { --name-size: 18px; --price-size: 20px; }
+.catalog-doc.cols-4 { --name-size: 13px; --price-size: 14.5px; }
+.catalog-doc.text-small { --scale: 0.9; }
+.catalog-doc.text-large { --scale: 1.15; }
+.catalog-doc.fonts-modern { --f-head: 'Figtree', 'Segoe UI', sans-serif; --w-head: 700; }
+.catalog-doc.fonts-elegant { --f-body: 'Fraunces', Georgia, serif; }
+
+/* ---- page ---- */
+.catalog-doc .cat-page {
+  display: flex;
+  flex-direction: column;
+  width: var(--page-w);
+  height: var(--page-h);
+  padding: var(--pad);
+  overflow: hidden;
+  background: var(--c-page);
+  color: var(--c-text);
+  font-family: var(--f-body);
+  font-size: calc(10.5px * var(--scale));
+  line-height: 1.45;
+  text-align: left;
+  break-after: page;
+}
+.catalog-doc .cat-page:last-child { break-after: auto; }
+.catalog-doc h1, .catalog-doc h2, .catalog-doc h3 {
+  margin: 0;
+  font-family: var(--f-head);
+  font-weight: var(--w-head);
+  line-height: 1.15;
+  letter-spacing: normal;
+  color: var(--c-heading);
+}
+.catalog-doc p { margin: 0; }
+
+/* ---- header ---- */
+.catalog-doc .cat-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+}
+.catalog-doc.header-line .cat-header { border-bottom: 2px solid var(--c-accent); }
+.catalog-doc .cat-logo { flex: none; height: 60px; max-width: 200px; object-fit: contain; }
+.catalog-doc.logo-size-small .cat-logo { height: 38px; max-width: 130px; }
+.catalog-doc.logo-size-large .cat-logo { height: 92px; max-width: 290px; }
+.catalog-doc .cat-titles { flex: 1; min-width: 0; }
+.catalog-doc .cat-header h1 { font-size: calc(28px * var(--scale)); }
+.catalog-doc .cat-subtitle { margin-top: 4px; font-size: calc(13px * var(--scale)); }
+.catalog-doc .cat-meta { margin-top: 5px; color: var(--c-muted); }
+.catalog-doc .cat-contact {
+  max-width: 45%;
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: var(--c-soft);
+  color: var(--c-heading);
+  font-size: calc(11.5px * var(--scale));
+  font-weight: 700;
+  text-align: right;
+  white-space: pre-line;
+}
+.catalog-doc.logo-top .cat-header { flex-direction: column; gap: 10px; text-align: center; }
+.catalog-doc.logo-top .cat-titles { flex: none; }
+.catalog-doc.logo-top .cat-contact { max-width: none; text-align: center; }
+
+/* ---- items ---- */
+.catalog-doc .cat-body { flex: 1; min-height: 0; overflow: hidden; }
+.catalog-doc .cat-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 22px 18px;
+  align-items: start;
+}
+.catalog-doc.cols-2 .cat-grid { gap: 26px 26px; }
+.catalog-doc.cols-4 .cat-grid { gap: 18px 14px; }
+
+/* Size section heading (Agrupar por tamanho): spans the whole row. */
+.catalog-doc .cat-section {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid var(--c-accent);
+}
+.catalog-doc.align-center .cat-section { justify-content: center; }
+.catalog-doc .cat-section h3 { font-size: calc(19px * var(--scale)); }
+.catalog-doc .cat-section-count { color: var(--c-muted); font-size: calc(10.5px * var(--scale)); }
+
+.catalog-doc .cat-card { min-width: 0; }
+.catalog-doc.card-outlined .cat-card { padding: 10px; border: 1px solid var(--c-line); border-radius: 12px; }
+.catalog-doc.card-filled .cat-card { padding: 10px; border-radius: 12px; background: var(--c-soft); }
+.catalog-doc.align-center .cat-card { text-align: center; }
+.catalog-doc.align-center .cat-photo { margin-left: auto; margin-right: auto; }
+
+.catalog-doc .cat-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 5;
+  /* Never taller than half the printable page, so a card always fits on one page
+     (e.g. landscape with 2 columns); the photo is cropped a little more instead. */
+  max-height: calc((var(--page-h) - 2 * var(--pad)) * 0.5);
+  border-radius: 12px;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--c-soft) 55%, var(--c-page)), var(--c-soft));
+}
+.catalog-doc.ratio-square .cat-photo { aspect-ratio: 1; }
+.catalog-doc.ratio-landscape .cat-photo { aspect-ratio: 4 / 3; }
+.catalog-doc.photo-square .cat-photo { border-radius: 0; }
+.catalog-doc .cat-photo img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.catalog-doc .cat-photo .jar-empty { width: 36%; fill: none; stroke: var(--c-accent); stroke-width: 2.5; stroke-linecap: round; opacity: 0.5; }
+
+/* The jar: rounded shoulders, a cork and a glass reflection. */
+.catalog-doc.photo-jar .cat-photo {
+  margin-top: 8px;
+  border-radius: 46% 46% 14px 14px / 24% 24% 14px 14px;
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.catalog-doc.photo-jar .cat-photo::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 34%;
+  height: 10px;
+  transform: translateX(-50%);
+  border-radius: 3px 3px 2px 2px;
+  background: #B8976A;
+}
+.catalog-doc.photo-jar .cat-photo::after {
+  content: '';
+  position: absolute;
+  left: 11%;
+  top: 16%;
+  width: 14%;
+  height: 46%;
+  border-left: 2.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+}
+
+.catalog-doc .cat-card h2 { margin-top: 10px; font-size: calc(var(--name-size) * var(--scale)); }
+.catalog-doc .cat-sub { margin-top: 2px; color: var(--c-muted); }
+.catalog-doc .cat-desc { margin-top: 6px; white-space: pre-line; }
+.catalog-doc .cat-plants { margin-top: 5px; color: var(--c-muted); }
+.catalog-doc .cat-plants strong { color: var(--c-text); font-weight: 700; }
+.catalog-doc .cat-price {
+  margin-top: 8px;
+  font-family: var(--f-head);
+  font-weight: var(--w-head);
+  font-size: calc(var(--price-size) * var(--scale));
+  color: var(--c-accent);
+}
+.catalog-doc .cat-price.ask { font-family: var(--f-body); font-size: 1.05em; font-weight: 700; color: var(--c-muted); }
+.catalog-doc .cat-empty { color: var(--c-muted); font-size: 13px; }
+
+/* ---- footer ---- */
+.catalog-doc .cat-footer {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-line);
+  color: var(--c-muted);
+  font-size: calc(9px * var(--scale));
+}
+.catalog-doc .cat-footer-text { white-space: pre-line; }
+.catalog-doc .cat-page-number { margin-left: auto; white-space: nowrap; }
+
+/* ---- live preview (in the app) ---- */
+.catalog-doc.is-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: max-content;
+  transform-origin: 0 0;
+}
+.catalog-doc.is-preview .cat-page { box-shadow: 0 6px 24px rgba(10, 20, 15, 0.18); }

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output (npm run dist)
+dist/
+out/
+
+# Local app data from `npm run dev` (database, backups, Chromium caches)
+.dev-data/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Claude Code / AI assistant files
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# Operating system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Logs and environment
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.env
+.env.*
