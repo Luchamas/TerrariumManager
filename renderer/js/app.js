@@ -1,8 +1,9 @@
-import { state, reload, onChange, onShelf, sold } from './state.js';
+import { state, reload, onChange, onShelf, sold, lotStock } from './state.js';
 import { setCurrency, guessCurrency } from './format.js';
 import { showError } from './ui.js';
 import { addDialog } from './terrarium.js';
 import * as shelfView from './views/shelf.js';
+import * as jarsView from './views/jars.js';
 import * as soldView from './views/sold.js';
 import * as buyersView from './views/buyers.js';
 import * as catalogView from './views/catalog.js';
@@ -11,6 +12,7 @@ import * as settingsView from './views/settings.js';
 
 const VIEWS = {
   shelf: shelfView,
+  jars: jarsView,
   sold: soldView,
   buyers: buyersView,
   catalog: catalogView,
@@ -34,6 +36,7 @@ function route() {
 
 function updateCounts() {
   document.querySelector('[data-count=shelf]').textContent = onShelf().length || '';
+  document.querySelector('[data-count=jars]').textContent = state.lots.reduce((sum, l) => sum + Math.max(0, lotStock(l)), 0) || '';
   document.querySelector('[data-count=sold]').textContent = sold().length || '';
   document.querySelector('[data-count=buyers]').textContent = state.buyers.length || '';
 }

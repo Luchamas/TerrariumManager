@@ -125,6 +125,7 @@ export function mount(root) {
 
   // ---- terrariums -------------------------------------------------------------------
 
+  // Only what's for sale: the personal collection (Acervo pessoal) stays out of the catalog.
   const available = () => state.items.filter((t) => t.status === 'available');
   const pickList = h('div', { class: 'pick-list' });
 

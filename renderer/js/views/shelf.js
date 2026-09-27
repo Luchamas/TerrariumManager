@@ -6,7 +6,7 @@ import { addDialog, showDetails } from '../terrarium.js';
 import { compareSizes, sizeLabel } from '../sizes.js';
 
 // Kept between visits so the shelf looks the way you left it.
-const filters = { query: '', size: '', sort: 'newest' };
+const filters = { query: '', size: '', status: '', sort: 'newest' };
 
 const SORTS = {
   newest: ['Mais recentes', (a, b) => (b.made_on ?? '').localeCompare(a.made_on ?? '') || b.id - a.id],
@@ -22,12 +22,16 @@ export function mount(root) {
     'aria-label': 'Buscar na prateleira', dataset: { shortcut: 'search' },
   });
   const sizeSelect = h('select', { 'aria-label': 'Filtrar por tamanho' });
+  const statusSelect = h('select', { 'aria-label': 'À venda ou acervo pessoal' },
+    h('option', { value: '' }, 'À venda e acervo'),
+    h('option', { value: 'available' }, 'Só à venda'),
+    h('option', { value: 'personal' }, 'Só acervo pessoal'));
   const sortSelect = h('select', { 'aria-label': 'Ordenar' },
     Object.entries(SORTS).map(([key, [label]]) => h('option', { value: key }, label)));
   sortSelect.value = filters.sort;
 
   const summary = h('p', { class: 'view-summary' });
-  const toolbar = h('div', { class: 'toolbar' }, search, sizeSelect, sortSelect);
+  const toolbar = h('div', { class: 'toolbar' }, search, statusSelect, sizeSelect, sortSelect);
   const grid = h('div', { class: 'shelf' });
   const catalogBtn = h('button', {
     type: 'button', class: 'btn', onclick: () => { location.hash = '#catalog'; },
@@ -38,7 +42,7 @@ export function mount(root) {
   // photos don't load again. A card is rebuilt when something it shows changes.
   const cards = new Map();
   const cardFor = (t) => {
-    const key = [t.name, t.size, t.made_on, t.price_cents, t.photo_version, getCurrency()].join('\n');
+    const key = [t.name, t.size, t.made_on, t.price_cents, t.status, t.photo_version, getCurrency()].join('\n');
     let entry = cards.get(t.id);
     if (entry?.key !== key) {
       entry = { key, el: card(t) };
@@ -49,6 +53,7 @@ export function mount(root) {
 
   search.addEventListener('input', debounce(() => { filters.query = search.value; update(); }));
   sizeSelect.addEventListener('change', () => { filters.size = sizeSelect.value; update(); });
+  statusSelect.addEventListener('change', () => { filters.status = statusSelect.value; update(); });
   sortSelect.addEventListener('change', () => { filters.sort = sortSelect.value; update(); });
 
   root.replaceChildren(
@@ -82,13 +87,20 @@ export function mount(root) {
     sizeSelect.value = filters.size;
     sizeSelect.hidden = sizes.length === 0;
 
+    // The personal collection (Acervo pessoal) is on the shelf too, and can be shown on its own.
+    const personal = all.filter((t) => t.status === 'personal').length;
+    if (!personal) filters.status = '';
+    statusSelect.value = filters.status;
+    statusSelect.hidden = personal === 0;
     const worth = all.reduce((sum, t) => sum + (t.price_cents ?? 0), 0);
     summary.textContent = all.length
       ? `${plural(all.length, 'terrário', 'terrários')}, somando ${money(worth)} em preço pedido`
+        + (personal ? ` · ${personal} no acervo pessoal` : '')
       : '';
 
     const q = filters.query.trim().toLocaleLowerCase(locale);
     const shown = all
+      .filter((t) => !filters.status || t.status === filters.status)
       .filter((t) => !filters.size || t.size === filters.size)
       .filter((t) => !q || [t.name, t.size, t.container, t.description, t.plants, t.notes]
         .some((v) => v?.toLocaleLowerCase(locale).includes(q)))
@@ -118,6 +130,7 @@ export function mount(root) {
 function card(t) {
   return h('button', { type: 'button', class: 'specimen', onclick: () => showDetails(t.id) },
     jar(t),
+    t.status === 'personal' ? h('span', { class: 'tag tag-personal specimen-tag' }, 'Acervo pessoal') : null,
     h('span', { class: 'specimen-name' }, t.name),
     h('span', { class: 'specimen-meta' }, [sizeLabel(t.size), t.made_on && date(t.made_on)].filter(Boolean).join(', ') || ' '),
     h('span', { class: 'specimen-price' }, t.price_cents != null ? money(t.price_cents) : 'Sem preço'),

@@ -46,8 +46,10 @@ export function mount(root) {
         h('span', { class: 'figure-value' }, value),
         h('span', { class: 'figure-detail' }, detail));
 
+    const personal = shelf.filter((t) => t.status === 'personal').length;
     figures.replaceChildren(
-      figure('Na prateleira', shelf.length.toLocaleString(locale), `somando ${money(sum(shelf, (t) => t.price_cents))} em preço pedido`),
+      figure('Na prateleira', shelf.length.toLocaleString(locale),
+        `somando ${money(sum(shelf, (t) => t.price_cents))} em preço pedido${personal ? `, ${personal} no acervo` : ''}`),
       figure('Vendido este mês', money(sum(monthSales, (t) => t.sold_price_cents)), plural(monthSales.length, 'terrário', 'terrários')),
       figure(`Vendido em ${thisYear}`, money(sum(yearSales, (t) => t.sold_price_cents)), `${money(sum(yearSales, profit))} de lucro`),
       figure('Desde o início', money(sum(sales, (t) => t.sold_price_cents)), plural(sales.length, 'terrário vendido', 'terrários vendidos')),
@@ -63,7 +65,7 @@ export function mount(root) {
     });
     drawChart(chartBox, months);
 
-    // By size: everything ever made, smallest size first, terrariums without a size last.
+    // By size: what sold and what's on the shelf, smallest size first, terrariums without a size last.
     const groups = new Map();
     for (const t of [...shelf, ...sales]) {
       const key = t.size ?? '';

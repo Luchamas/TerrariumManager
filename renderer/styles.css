@@ -25,6 +25,10 @@
 
   --amber: #8A5410;       /* sold */
   --amber-soft: #F5E7CF;
+  --rose: #973066;        /* given away (doado) */
+  --rose-soft: #F7E2EE;
+  --sky: #255E84;         /* personal collection (acervo) */
+  --sky-soft: #DDEAF3;
   --danger: #B3261E;
   --danger-soft: #F9E1DE;
 
@@ -35,6 +39,7 @@
   --sprout: #8FAF98;
 
   --shadow: 0 18px 50px rgba(20, 38, 30, 0.22);
+  --shadow-pop: 0 10px 28px rgba(20, 38, 30, 0.16);
   --serif: 'Fraunces', Georgia, serif;
   --sans: 'Figtree', 'Segoe UI', system-ui, sans-serif;
   color-scheme: light;
@@ -62,6 +67,10 @@
 
     --amber: #E3B470;
     --amber-soft: #3A2E1C;
+    --rose: #EBA5CB;
+    --rose-soft: #3A2231;
+    --sky: #93C4E6;
+    --sky-soft: #1C2E3B;
     --danger: #F08A80;
     --danger-soft: #3D2220;
 
@@ -72,6 +81,7 @@
     --sprout: #5E7F68;
 
     --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.45);
     color-scheme: dark;
   }
 }
@@ -197,6 +207,55 @@ input[aria-invalid=true], textarea[aria-invalid=true] { border-color: var(--dang
 }
 .money-field input[type=text]:focus { outline: none; }
 ::placeholder { color: var(--ink-3); }
+
+/* Combobox: text field with a dropdown of suggestions (see combobox.js). */
+.combo { position: relative; }
+.combo:has(.combo-toggle) input { padding-right: 34px; }
+.combo-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.combo-toggle:hover { color: var(--ink); }
+.combo-toggle svg { width: 12px; height: 12px; transition: transform 120ms; }
+.combo input[aria-expanded=true] + .combo-toggle svg { transform: rotate(180deg); }
+.combo-list {
+  position: fixed;
+  inset: auto; /* placed and sized by combobox.js */
+  width: max-content;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  font-size: 14px;
+}
+.combo-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.combo-option[aria-selected=true] { background: var(--fern-soft); }
+.combo-option.current { font-weight: 700; }
+.combo-option small { flex: none; color: var(--ink-3); font-size: 12.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
 
 .field label { display: block; font-size: 13px; font-weight: 700; color: var(--ink-2); margin-bottom: 5px; }
 .field-hint { display: block; color: var(--ink-3); font-size: 12.5px; margin-top: 4px; }
@@ -333,9 +392,65 @@ table.sales tbody tr:hover { background: var(--surface-2); }
 table.sales tbody tr:focus-visible { outline-offset: -2px; }
 .row-name { display: flex; align-items: center; gap: 12px; }
 .row-name small { display: block; color: var(--ink-3); font-size: 12.5px; }
+.cell-sub { display: block; color: var(--ink-3); font-size: 12.5px; }
 
 .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
 .tag-sold { background: var(--amber-soft); color: var(--amber); }
+.tag-available { background: var(--fern-soft); color: var(--fern-strong); }
+.tag-personal { background: var(--sky-soft); color: var(--sky); }
+.tag-donated { background: var(--rose-soft); color: var(--rose); }
+.tag-lost { background: var(--line); color: var(--ink-2); }
+
+.tabs { display: flex; gap: 4px; margin: -6px 0 20px; border-bottom: 1px solid var(--line); }
+.tab {
+  padding: 8px 14px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-3);
+  font-weight: 700;
+  cursor: pointer;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected=true] { color: var(--ink); border-bottom-color: var(--fern); }
+.tab-count { margin-left: 7px; font-size: 13px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.notes-cell { max-width: 380px; color: var(--ink-2); font-size: 13.5px; white-space: pre-line; }
+
+/* ---- frascos (jar stock) ------------------------------------------------------------- */
+.toolbar-check { align-self: center; margin: 0 4px; font-weight: 400; }
+table.jars .th-sort { white-space: nowrap; }
+.lot-name small { display: block; color: var(--ink-3); font-size: 12.5px; }
+.stock-pill {
+  display: inline-block;
+  min-width: 28px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--fern-soft);
+  color: var(--fern-strong);
+  font-weight: 700;
+  text-align: center;
+}
+.lot-drawer .drawer-title { margin-top: 4px; }
+.stock-box { margin-top: 20px; padding: 14px 18px; border-radius: 12px; background: var(--fern-soft); }
+.stock-box.stock-empty { background: var(--surface-2); }
+.stock-count { font-size: 22px; font-weight: 700; }
+.stock-detail { color: var(--ink-2); }
+
+.purchase-modal { width: min(940px, 94vw); }
+.purchase-head { margin-top: 18px; }
+.purchase-items { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.purchase-item { padding: 14px 16px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.item-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) 38px; gap: 12px 14px; align-items: start; }
+.item-grid > .btn-icon { align-self: end; margin-bottom: 1px; }
+/* Always starts the second row, even when the remove button beside Quantidade is hidden. */
+.item-unit { grid-column: 1; }
+.item-lid { grid-column: span 2; }
+.item-more > summary { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; font-weight: 700; cursor: pointer; }
+.item-more .form-grid { margin-top: 10px; }
+.item-computed { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.add-item { margin-top: 12px; }
+.purchase-total { margin-top: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* ---- overview ------------------------------------------------------------------------ */
 .figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 8px; }
@@ -602,6 +717,20 @@ dialog::backdrop { background: rgba(12, 22, 17, 0.42); }
 .facts dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sale-block { margin-top: 20px; padding: 14px 16px 16px; border-radius: 12px; background: var(--amber-soft); }
 .sale-block .facts { margin-top: 12px; }
+.sale-block.sale-donated, .sale-fields[data-status=donated] { background: var(--rose-soft); }
+.sale-block.sale-lost, .sale-fields[data-status=lost] { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.status-note { margin-top: 14px; color: var(--ink-2); }
+.status-row { margin-top: 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+.form-grid > .row-start { grid-column: 1; }
+.specimen-tag { align-self: flex-start; margin-bottom: 4px; }
+
+/* ---- spreadsheet import --------------------------------------------------------------------- */
+.import-summary { margin: 12px 0 14px; padding-left: 20px; }
+.import-summary li + li { margin-top: 4px; }
+.import-note { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; background: var(--amber-soft); color: var(--amber); font-size: 13.5px; }
+.review > summary { margin-top: 16px; font-weight: 700; cursor: pointer; }
+.review-list { margin: 12px 0 0; padding-left: 24px; max-height: 50vh; overflow-y: auto; color: var(--ink-2); font-size: 13.5px; }
+.review-list li + li { margin-top: 7px; }
 .sale-line { font-weight: 700; }
 
 .link {
@@ -623,6 +752,8 @@ dialog::backdrop { background: rgba(12, 22, 17, 0.42); }
 .contact { margin-top: 20px; padding: 16px 18px; border-radius: 12px; background: var(--fern-soft); }
 .contact-phone { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
 .contact-empty { color: var(--ink-2); }
+.contact-instagram { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.contact-handle { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
 .contact .button-row { margin-top: 12px; }
 .drawer-section { font-size: 17px; margin-top: 26px; }
 

@@ -42,6 +42,13 @@ export function moneyInput(name, cents) {
   return box;
 }
 
+// Fills in a moneyInput, as if the amount had been typed (null empties it).
+export function setMoney(box, cents) {
+  const input = box.querySelector('input');
+  input.value = moneyPlain(cents);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 // Cents typed in a moneyInput, or null when it's empty.
 export function moneyCents(box) {
   const digits = box.querySelector('input').value.replace(/\D/g, '');

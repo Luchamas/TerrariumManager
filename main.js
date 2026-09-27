@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Store } = require('./src/db');
+const { readXlsx } = require('./src/xlsx');
+const { planImport, applyImport, checkNotImported } = require('./src/import-sheet');
 
 const RENDERER_DIR = path.join(__dirname, 'renderer');
 const DAILY_BACKUPS_KEPT = 14;
@@ -137,10 +139,15 @@ function registerIpc() {
   handle('terrariums:list', () => store.list());
   handle('terrariums:create', (data) => store.create(data));
   handle('terrariums:update', (id, data) => store.update(id, data));
-  handle('terrariums:sell', (id, sale) => store.sell(id, sale));
+  handle('terrariums:settle', (id, outcome) => store.settle(id, outcome));
   handle('terrariums:unsell', (id) => store.unsell(id));
   handle('terrariums:delete', (id) => store.remove(id));
   handle('photos:set', (id, bytes, mime) => store.setPhoto(id, bytes, mime));
+
+  handle('jars:list', () => store.listLots());
+  handle('jars:create', (items) => store.createLots(items));
+  handle('jars:update', (id, data) => store.updateLot(id, data));
+  handle('jars:delete', (id) => store.removeLot(id));
 
   handle('buyers:list', () => store.listBuyers());
   handle('buyers:update', (id, data) => store.updateBuyer(id, data));
@@ -151,6 +158,13 @@ function registerIpc() {
     const digits = String(phone ?? '').replace(/\D/g, '');
     if (!/^\d{10,11}$/.test(digits)) throw new Error('Número de celular inválido.');
     return shell.openExternal(`https://wa.me/55${digits}`);
+  });
+
+  // Opens an Instagram profile in the default browser.
+  handle('contact:instagram', (handle) => {
+    const name = String(handle ?? '').replace(/^@/, '');
+    if (!/^[\w.]{1,30}$/.test(name)) throw new Error('Perfil do Instagram inválido.');
+    return shell.openExternal(`https://www.instagram.com/${name}/`);
   });
 
   handle('settings:get', () => store.getSettings());
@@ -207,6 +221,61 @@ function registerIpc() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     await store.restoreFrom(source, path.join(backupDir(), `before-restore-${stamp}.db`));
     return source;
+  });
+
+  // Importing the "Controle Terrários" spreadsheet takes two steps: the preview reads the
+  // file and says what would be added; nothing is saved until the renderer confirms with
+  // the preview's token. The plan waits here, so the renderer never hands back file paths.
+  const importPlans = new Map();
+  handle('data:importSheetPreview', async () => {
+    checkNotImported(store);
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Importar a planilha Controle Terrários',
+      defaultPath: app.getPath('downloads'),
+      properties: ['openFile'],
+      filters: [{ name: 'Planilha do Excel', extensions: ['xlsx'] }],
+    });
+    if (canceled || !filePaths.length) return null;
+    const plan = planImport(readXlsx(filePaths[0]));
+    const token = String(Date.now());
+    importPlans.clear();
+    importPlans.set(token, plan);
+    return {
+      token,
+      file: path.basename(filePaths[0]),
+      summary: plan.summary,
+      warnings: plan.warnings,
+      existing: store.list().length,
+      knownBuyers: plan.buyerNames.filter((name) => store.findBuyer(name)).length,
+    };
+  });
+
+  handle('data:importSheetApply', async (token) => {
+    const plan = importPlans.get(token);
+    if (!plan) throw new Error('A prévia da importação expirou. Escolha a planilha de novo.');
+    fs.mkdirSync(backupDir(), { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    await store.backupInBackground(path.join(backupDir(), `before-import-${stamp}.db`));
+    applyImport(store, plan);
+    importPlans.clear();
+    return { summary: plan.summary, warnings: plan.warnings };
+  });
+
+  // Saves the CSV files the renderer built (see renderer/js/csv.js) into a folder the user picks.
+  handle('data:exportCsv', async (files) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Escolha a pasta onde salvar as planilhas',
+      defaultPath: app.getPath('documents'),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths.length) return null;
+    const folder = filePaths[0];
+    for (const { name, content } of files) {
+      if (!/^[a-z0-9-]+\.csv$/.test(name)) throw new Error(`Nome de arquivo inválido: ${name}`);
+      fs.writeFileSync(path.join(folder, name), content, 'utf8');
+    }
+    shell.showItemInFolder(path.join(folder, files[0].name));
+    return folder;
   });
 
   // Prints the catalog pages the renderer has placed in its print-only area (see exportPdf in

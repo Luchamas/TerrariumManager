@@ -1,8 +1,9 @@
-// Buyer details panel, buyer editing, and the Comprador + Celular fields used when selling.
+// Buyer details panel, buyer editing, and the Comprador + Celular + Instagram fields used when selling.
 import { h, openDialog, confirmDialog, field, setFieldError, toast, showError } from './ui.js';
-import { money, date, formatPhone, plural } from './format.js';
+import { money, date, formatPhone, plural, instagramHandles, instagramLabel } from './format.js';
 import { jar } from './photo.js';
 import { phoneInput, phoneDigits, setPhone } from './phone-input.js';
+import { combobox } from './combobox.js';
 import { state, reload, buyerList, findBuyer } from './state.js';
 import { showDetails } from './terrarium.js';
 
@@ -13,6 +14,12 @@ const canWhatsApp = (phone) => /^\d{10,11}$/.test(phone ?? '');
 export function showBuyer(id) {
   const b = buyerList().find((x) => x.id === id);
   if (!b) return;
+  const handles = instagramHandles(b.instagram);
+  // Where they first came from: the oldest purchase or gift that says.
+  const firstChannel = [...b.purchases, ...b.gifts]
+    .filter((t) => t.channel)
+    .sort((x, y) => (x.sold_on ?? '9').localeCompare(y.sold_on ?? '9') || x.id - y.id)[0]?.channel;
+  const missing = [!b.phone && 'celular', !b.instagram && 'Instagram'].filter(Boolean);
 
   openDialog('drawer buyer-drawer', (close) => [
     h('div', { class: 'drawer-head' },
@@ -33,29 +40,44 @@ export function showBuyer(id) {
                 h('button', { type: 'button', class: 'btn', onclick: () => copyPhone(b.phone) }, 'Copiar número'),
               ),
             ]
-          : [
-              h('p', { class: 'contact-empty' }, 'Sem celular cadastrado.'),
-              h('div', { class: 'button-row' },
-                h('button', { type: 'button', class: 'btn', onclick: () => { close(); editBuyer(b.id); } }, 'Adicionar celular'),
-              ),
-            ],
+          : h('p', { class: 'contact-empty' }, 'Sem celular cadastrado.'),
+        b.instagram
+          ? h('div', { class: 'contact-instagram' },
+              h('p', { class: 'contact-handle' }, instagramLabel(b.instagram)),
+              handles.length
+                ? h('div', { class: 'button-row' }, handles.map((handle) => h('button', {
+                    type: 'button', class: 'btn', onclick: () => window.api.contact.instagram(handle).catch(showError),
+                  }, handles.length > 1 ? `Abrir @${handle}` : 'Abrir no Instagram')))
+                : null)
+          : null,
+        missing.length
+          ? h('div', { class: 'button-row' },
+              h('button', { type: 'button', class: 'btn', onclick: () => { close(); editBuyer(b.id); } }, `Adicionar ${missing.join(' ou ')}`))
+          : null,
       ),
 
       h('dl', { class: 'facts' },
+        firstChannel ? [h('dt', {}, 'Chegou por'), h('dd', {}, firstChannel)] : null,
         h('dt', {}, 'Compras'), h('dd', {}, plural(b.purchases.length, 'terrário', 'terrários')),
         b.purchases.length ? [h('dt', {}, 'Total gasto'), h('dd', {}, money(b.total))] : null,
+        b.gifts.length ? [h('dt', {}, 'Cortesias recebidas'), h('dd', {}, plural(b.gifts.length, 'terrário', 'terrários'))] : null,
         b.notes ? [h('dt', {}, 'Observações'), h('dd', {}, b.notes)] : null,
       ),
 
-      b.purchases.length
+      b.purchases.length || b.gifts.length
         ? [
-            h('h3', { class: 'drawer-section' }, 'Terrários comprados'),
-            h('ul', { class: 'recent' }, b.purchases.map((t) => h('li', {},
-              h('button', { type: 'button', class: 'recent-item', onclick: () => { close(); showDetails(t.id); } },
-                jar(t, { size: 'jar-tiny' }),
-                h('span', { class: 'recent-name' }, t.name, h('small', {}, `Vendido em ${date(t.sold_on)}`)),
-                h('span', { class: 'recent-price' }, money(t.sold_price_cents)),
-              )))),
+            h('h3', { class: 'drawer-section' }, b.gifts.length ? 'Terrários comprados e recebidos' : 'Terrários comprados'),
+            h('ul', { class: 'recent' }, [...b.purchases, ...b.gifts]
+              .sort((x, y) => (y.sold_on ?? '').localeCompare(x.sold_on ?? '') || y.id - x.id)
+              .map((t) => h('li', {},
+                h('button', { type: 'button', class: 'recent-item', onclick: () => { close(); showDetails(t.id); } },
+                  jar(t, { size: 'jar-tiny' }),
+                  h('span', { class: 'recent-name' }, t.name,
+                    h('small', {}, `${t.status === 'donated' ? 'Cortesia' : 'Vendido'}${t.sold_on ? ` em ${date(t.sold_on)}` : ''}`)),
+                  t.status === 'donated'
+                    ? h('span', { class: 'tag tag-donated' }, 'Cortesia')
+                    : h('span', { class: 'recent-price' }, money(t.sold_price_cents)),
+                )))),
           ]
         : null,
     ),
@@ -96,6 +118,7 @@ export function editBuyer(id) {
   if (!b) return;
   const name = h('input', { type: 'text', name: 'name', value: b.name, autocomplete: 'off', maxLength: 120 });
   const phone = phoneInput('phone', b.phone);
+  const instagram = instagramInput('instagram', b.instagram);
   const notes = h('textarea', { name: 'notes', rows: 3, value: b.notes ?? '', placeholder: 'Ex.: prefere retirar no fim de semana' });
 
   openDialog('modal modal-small', (close) => {
@@ -103,7 +126,8 @@ export function editBuyer(id) {
       h('h2', { class: 'modal-title' }, 'Editar comprador'),
       h('div', { class: 'form-grid' },
         h('div', { class: 'span-2' }, field('Nome', name, 'Muda o nome em todas as vendas deste comprador')),
-        h('div', { class: 'span-2' }, field('Celular', phone)),
+        field('Celular', phone),
+        field('Instagram', instagram),
         h('div', { class: 'span-2' }, field('Observações', notes)),
       ),
       h('div', { class: 'modal-actions' },
@@ -119,7 +143,7 @@ export function editBuyer(id) {
       const invalid = form.querySelector('[aria-invalid=true]');
       if (invalid) { invalid.focus(); return; }
       try {
-        await window.api.buyers.update(b.id, { name: name.value, phone: digits, notes: notes.value });
+        await window.api.buyers.update(b.id, { name: name.value, phone: digits, instagram: instagram.value, notes: notes.value });
         await reload();
         close();
         toast('Comprador atualizado');
@@ -133,20 +157,32 @@ export function editBuyer(id) {
 
 // ---- fields for a sale --------------------------------------------------------------
 
-let listSeq = 0;
+// The Instagram field: the handle, with or without @, or a pasted profile link.
+function instagramInput(name, value) {
+  return h('input', {
+    type: 'text', name, autocomplete: 'off', spellcheck: false, value: value ? instagramLabel(value) : '',
+    placeholder: '@usuario', maxLength: 120,
+  });
+}
 
-// Comprador + Celular inputs. Typing the name of someone who bought before fills in their phone.
-export function buyerFields({ name, phone } = {}) {
-  const listId = `buyer-options-${++listSeq}`;
-  const nameInput = h('input', { type: 'text', name: 'buyer', list: listId, autocomplete: 'off', value: name ?? '', maxLength: 120 });
+// Comprador + Celular + Instagram inputs. Typing the name of someone who bought before fills in
+// their phone and Instagram. `label` names the person, e.g. "Para quem" for a gift.
+export function buyerFields({ name, phone, instagram, label = 'Comprador' } = {}) {
+  const nameInput = h('input', { type: 'text', name: 'buyer', autocomplete: 'off', value: name ?? '', maxLength: 120 });
   const phoneEl = phoneInput('buyer_phone', phone);
-  const nameField = field('Comprador', nameInput, 'Opcional');
+  const instagramEl = instagramInput('buyer_instagram', instagram);
+  const known = state.buyers.map((b) => ({
+    value: b.name, label: b.phone ? formatPhone(b.phone) : b.instagram ? instagramLabel(b.instagram) : null,
+  }));
+  const nameField = field(label, combobox(nameInput, known), 'Opcional');
   const phoneField = field('Celular', phoneEl);
+  const instagramField = field('Instagram', instagramEl);
   const hint = nameField.querySelector('.field-hint');
-  const options = h('datalist', { id: listId },
-    state.buyers.map((b) => h('option', { value: b.name, label: b.phone ? formatPhone(b.phone) : '' })));
 
-  let autoPhone = findBuyer(name)?.phone === phone ? phone : null;
+  // What was filled in from a known buyer, so it can be taken back if the name changes.
+  const saved = findBuyer(name);
+  let autoPhone = saved?.phone === phone ? phone : null;
+  let autoInstagram = saved?.instagram && saved.instagram === instagram ? instagramLabel(instagram) : null;
   function sync() {
     const match = findBuyer(nameInput.value);
     hint.textContent = match ? 'Cliente já cadastrado' : 'Opcional';
@@ -158,6 +194,13 @@ export function buyerFields({ name, phone } = {}) {
       setPhone(phoneEl, '');
       autoPhone = null;
     }
+    const typedInstagram = instagramEl.value.trim();
+    if (match?.instagram && (!typedInstagram || typedInstagram === autoInstagram)) {
+      instagramEl.value = autoInstagram = instagramLabel(match.instagram);
+    } else if (!match && autoInstagram && typedInstagram === autoInstagram) {
+      instagramEl.value = '';
+      autoInstagram = null;
+    }
   }
   nameInput.addEventListener('input', sync);
   sync();
@@ -165,15 +208,15 @@ export function buyerFields({ name, phone } = {}) {
   return {
     nameField,
     phoneField,
-    options,
+    instagramField,
     validate() {
       const digits = phoneDigits(phoneEl);
-      const missingName = !nameInput.value.trim() && digits;
+      const missingName = !nameInput.value.trim() && (digits || instagramEl.value.trim());
       const shortPhone = digits && digits.length < 10;
       setFieldError(nameInput, missingName ? 'Informe o nome do comprador' : null);
       setFieldError(phoneEl, shortPhone ? 'Número incompleto: DDD + número' : null);
       return !missingName && !shortPhone;
     },
-    value: () => ({ buyer_name: nameInput.value, buyer_phone: phoneDigits(phoneEl) }),
+    value: () => ({ buyer_name: nameInput.value, buyer_phone: phoneDigits(phoneEl), buyer_instagram: instagramEl.value }),
   };
 }

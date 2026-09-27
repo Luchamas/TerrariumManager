@@ -7,12 +7,18 @@ contextBridge.exposeInMainWorld('api', {
     list: call('terrariums:list'),
     create: call('terrariums:create'),
     update: call('terrariums:update'),
-    sell: call('terrariums:sell'),
+    settle: call('terrariums:settle'),
     unsell: call('terrariums:unsell'),
     remove: call('terrariums:delete'),
   },
   photos: {
     set: call('photos:set'),
+  },
+  jars: {
+    list: call('jars:list'),
+    create: call('jars:create'),
+    update: call('jars:update'),
+    remove: call('jars:delete'),
   },
   buyers: {
     list: call('buyers:list'),
@@ -21,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   contact: {
     whatsapp: call('contact:whatsapp'),
+    instagram: call('contact:instagram'),
   },
   settings: {
     get: call('settings:get'),
@@ -31,6 +38,9 @@ contextBridge.exposeInMainWorld('api', {
     openFolder: call('data:openFolder'),
     backup: call('data:backup'),
     restore: call('data:restore'),
+    importSheetPreview: call('data:importSheetPreview'),
+    importSheetApply: call('data:importSheetApply'),
+    exportCsv: call('data:exportCsv'),
   },
   catalog: {
     export: call('catalog:export'),

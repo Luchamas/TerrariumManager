@@ -1,5 +1,5 @@
 import { h, debounce } from '../ui.js';
-import { money, date, formatPhone, plural, locale } from '../format.js';
+import { money, date, formatPhone, plural, locale, instagramLabel } from '../format.js';
 import { buyerList } from '../state.js';
 import { showBuyer } from '../buyer.js';
 import { sortHeader, sortRows, moreRows, ROWS_PER_PAGE } from '../table.js';
@@ -9,6 +9,7 @@ const filters = { query: '', sort: { key: 'last', dir: -1 } };
 const COLUMNS = [
   { key: 'name', label: 'Nome', value: (b) => b.name },
   { key: 'phone', label: 'Celular', value: (b) => b.phone ?? '' },
+  { key: 'instagram', label: 'Instagram', value: (b) => b.instagram ?? '' },
   { key: 'count', label: 'Compras', num: true, desc: true, value: (b) => b.purchases.length },
   { key: 'total', label: 'Total gasto', num: true, desc: true, value: (b) => b.total },
   { key: 'last', label: 'Última compra', desc: true, value: (b) => b.last ?? '' },
@@ -16,7 +17,7 @@ const COLUMNS = [
 
 export function mount(root) {
   const search = h('input', {
-    type: 'search', class: 'search', placeholder: 'Buscar por nome ou celular…', value: filters.query,
+    type: 'search', class: 'search', placeholder: 'Buscar por nome, celular ou Instagram…', value: filters.query,
     'aria-label': 'Buscar compradores', dataset: { shortcut: 'search' },
   });
   const summary = h('p', { class: 'view-summary' });
@@ -54,6 +55,7 @@ export function mount(root) {
     const shown = sortRows(
       all.filter((b) => !q
         || b.name.toLocaleLowerCase(locale).includes(q)
+        || b.instagram?.toLocaleLowerCase(locale).includes(q.replace(/^@/, ''))
         || (qDigits && b.phone?.includes(qDigits))),
       COLUMNS, filters.sort,
     );
@@ -62,6 +64,7 @@ export function mount(root) {
       const row = h('tr', { tabindex: 0, onclick: () => showBuyer(b.id) },
         h('td', {}, h('span', { class: 'buyer-name' }, b.name)),
         h('td', { class: 'nowrap' }, b.phone ? formatPhone(b.phone) : h('span', { class: 'muted' }, '–')),
+        h('td', {}, b.instagram ? instagramLabel(b.instagram) : h('span', { class: 'muted' }, '–')),
         h('td', { class: 'num' }, b.purchases.length),
         h('td', { class: 'num strong' }, b.purchases.length ? money(b.total) : '–'),
         h('td', { class: 'nowrap' }, b.last ? date(b.last) : h('span', { class: 'muted' }, 'Nenhuma compra')),

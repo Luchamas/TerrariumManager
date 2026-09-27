@@ -1,17 +1,18 @@
 # Terrarium Manager
 
-A small Windows desktop app for keeping track of the terrariums on your shelf, the ones you've sold (date, price, profit) and who bought them. It also turns the unsold terrariums into a PDF catalog to send to clients. The interface is in Brazilian Portuguese.
+A small Windows desktop app for keeping track of the jars you buy, the terrariums you make with them, what became of each one (sold, given away, lost or kept) and who bought them. It also turns the terrariums for sale into a PDF catalog to send to clients. The interface is in Brazilian Portuguese.
 
 Built with Electron and SQLite. It uses Node's built-in `node:sqlite`, so there are no native modules to compile, and the UI is plain HTML, CSS and JavaScript with no build step.
 
 ## Features
 
-- **Na prateleira**: every terrarium not yet sold, with photo, size, container, plants, cost and asking price. Search by name, plants or notes.
-- **Vendidos**: sales with date, price and profit. **Marcar como vendido** records a sale and its buyer; a sale can be undone.
-- **Compradores**: buyers with name, cellphone and notes, their purchases, and a button that opens a WhatsApp chat.
-- **Catálogo Rápido**: an A4 PDF of the unsold terrariums, with your logo, colors, fonts and layout, and a live preview.
+- **Na prateleira**: every terrarium still on the shelf, with photo, size, container, plants, cost and asking price. Search by name, plants or notes. Terrariums in the **Acervo pessoal** (personal collection) are here too, tagged: they can be sold but stay out of the catalog.
+- **Frascos**: the jars you've bought, one lot per kind of jar per purchase (collection, supplier, date, quantity, jar + lid + shipping cost, suggested price). **Registrar compra** enters a whole order at once and splits its shipping among the jars, equally or in proportion to each jar's price. Stock goes down by itself: when adding a terrarium, pick its jar under **Frasco do estoque**, which also fills in the container, cost, price and description.
+- **Vendidos**: tabs for sales (date, price, profit), **Cortesias** (terrariums given away, and what they cost) and **Perdas** (terrariums that died or broke). Each can be undone with **Voltar para a prateleira**. Sales and gifts record **De onde veio a venda** (Instagram, friends, a fair…) and when they were delivered, and can be filtered by where they came from: the totals then show what each channel brings in.
+- **Compradores**: buyers with name, cellphone, Instagram and notes, their purchases and gifts, where they first came from, and buttons that open a WhatsApp chat or their Instagram profile.
+- **Catálogo Rápido**: an A4 PDF of the terrariums for sale, with your logo, colors, fonts and layout, and a live preview.
 - **Visão geral**: totals for this month, this year and all time, sales per month over the last 12 months, and a breakdown by size.
-- **Configurações**: currency, where the data lives, and saving or restoring a backup.
+- **Configurações**: currency, where the data lives, saving or restoring a backup, exporting everything as spreadsheets (CSV), and a one-time import of the old "Controle Terrários" spreadsheet.
 - Daily automatic backups, keeping the last 14.
 - Shortcuts: **Ctrl+N** adds a terrarium, **Ctrl+F** jumps to the search box.
 
@@ -65,10 +66,14 @@ To change the icon, edit the SVG in `scripts/make-icon.js` and run `npm run icon
 | `main.js` | Electron main process: window, `app://` and `photo://` protocols, IPC, backups, PDF export |
 | `preload.js` | The `window.api` bridge the UI uses to talk to the database |
 | `src/db.js` | SQLite schema, migrations and queries (money is stored in cents) |
+| `src/xlsx.js` | Reads cell values from an .xlsx file, with no extra libraries |
+| `src/import-sheet.js` | The one-time import of the "Controle Terrários" spreadsheet |
 | `renderer/` | The UI: HTML, CSS, fonts and JavaScript modules |
-| `renderer/js/views/` | One file per page: shelf, sold, buyers, catalog, overview, settings |
-| `renderer/js/terrarium.js` | Details panel, add/edit form and "Marcar como vendido" dialog |
+| `renderer/js/views/` | One file per page: shelf, jars, sold, buyers, catalog, overview, settings |
+| `renderer/js/terrarium.js` | Details panel, add/edit form, and the sold / given away / lost dialog |
+| `renderer/js/jar-lot.js` | Jar lot panel, "Registrar compra" (with the shipping split) and lot editing |
 | `renderer/js/buyer.js` | Buyer panel, buyer editing, and the Comprador + Celular fields used when selling |
+| `renderer/js/csv.js` | The CSV export |
 | `renderer/js/catalog-render.js` | Lays out the Catálogo Rápido's A4 pages |
 | `scripts/dev.js` | The `npm run dev` runner with live reload |
 | `scripts/make-icon.js` | Draws `build/icon.png` from an SVG |
@@ -79,7 +84,21 @@ To change the icon, edit the SVG in `scripts/make-icon.js` and run `npm run icon
 
 Buyers live in their own table; each sale points at one. When selling, a name that matches an existing buyer (ignoring capitals and extra spaces) reuses that buyer, and a phone typed there updates theirs. Buyers left with no purchases and no phone or notes are removed automatically.
 
-To add a column, add a new numbered entry to `MIGRATIONS` in `src/db.js`, bump `SCHEMA_VERSION` and add the column name to `EDITABLE`. Existing databases upgrade automatically the next time the app opens, and a copy of the old data is saved to `backups\before-upgrade-v<N>-….db` first.
+A terrarium's `status` is `available`, `personal` (Acervo pessoal: on the shelf, out of the catalog), `sold`, `donated` or `lost`. For the last three, `sold_on` is the day it left the shelf, `buyer_id` who got it, `channel` where the sale came from and `delivered_on` when it was delivered (none of them is set for a loss), and `sale_notes` the notes or reason; only a sale has `sold_price_cents`. A buyer's `instagram` is the handle without the @ (several are kept as "ana / bia"). `Store` keeps these consistent whatever the renderer sends.
+
+Jars live in `jar_lots`, one row per kind of jar per purchase. How many are left is never stored: it's `quantity` minus the terrariums whose `lot_id` points at the lot, so deleting a terrarium puts its jar back. A lot with nothing left can't be given to another terrarium.
+
+To add a column, add a new numbered entry to `MIGRATIONS` in `src/db.js`, bump `SCHEMA_VERSION` and add the column name to `EDITABLE` (or `LOT_EDITABLE`). Existing databases upgrade automatically the next time the app opens, and a copy of the old data is saved to `backups\before-upgrade-v<N>-….db` first. Foreign keys are switched off while upgrading, because changing a CHECK constraint means rebuilding the table, and dropping `terrariums` with them on would delete every photo. Each upgrade runs `PRAGMA foreign_key_check` before it's kept.
+
+**Careful with `npm run dev`:** it restarts the app whenever `src/` changes, so a half-written migration runs against `.dev-data` as soon as you save it. Stop the dev app while writing one.
+
+### Importing the old spreadsheet
+
+**Configurações → Importar planilha "Controle Terrários"…** reads the "Frascos de vidro" and "VENDIDOS" sheets. Each row of "Frascos de vidro" becomes a jar lot, and each unit of a lot with an assembly date becomes a terrarium. Which lot each sale came from, and what happened to units the sales don't cover (the sheet showed that with row colours), was worked out by hand and is written down in `src/import-sheet.js` (`SALE_LOTS`, `OTHER_OUTCOMES`). The import checks the rows it relies on and refuses a spreadsheet that has changed since. It shows a preview first, saves a backup to `backups\before-import-….db`, and then lists what the spreadsheet left unclear, for review. It can only run once (the `sheet_imported_at` setting).
+
+### Spreadsheets (CSV)
+
+**Configurações → Exportar planilhas (CSV)…** writes `frascos.csv`, `terrarios.csv` and `compradores.csv` to a folder you choose. They use semicolons, decimal commas and dd/mm/yyyy dates, with a byte-order mark, which is what Excel and LibreOffice expect in Portuguese.
 
 ### Catálogo Rápido
 

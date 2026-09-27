@@ -95,6 +95,18 @@ export function formatPhone(digits) {
   return `(${ddd}) ${rest.slice(0, split)}-${rest.slice(split)}`;
 }
 
+// Instagram, as stored: usually one handle ("beltaparo"), sometimes several ("ana / bia") or
+// just a name. The handles in it, to link to; a name has none.
+export function instagramHandles(text) {
+  return String(text ?? '').split(/\s*[/,;]\s*/).map((part) => part.replace(/^@/, '')).filter((part) => /^[\w.]{1,30}$/.test(part));
+}
+
+// "beltaparo" → "@beltaparo", "ana / bia" → "@ana / @bia"; a name stays as it is.
+export function instagramLabel(text) {
+  if (!text) return '';
+  return text.split(/\s*[/,;]\s*/).map((part) => (/^@?[\w.]{1,30}$/.test(part) ? `@${part.replace(/^@/, '')}` : part)).join(' / ');
+}
+
 export function plural(n, one, many) {
   return `${n.toLocaleString(locale)} ${n === 1 ? one : many}`;
 }
