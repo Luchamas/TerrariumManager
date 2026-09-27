@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync, backup } = require('node:sqlite');
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 11;
 
 // What became of a terrarium. `personal` (Acervo pessoal) stays on the shelf and can be sold,
 // but is left out of the catalog. `sold`, `donated` and `lost` have left the shelf: `sold_on`
@@ -192,6 +192,24 @@ const MIGRATIONS = {
     moveNoteLine(db, 'terrariums', 'sale_notes', 'delivered_on', /^Entregue em (\d{2})\/(\d{2})\/(\d{4})\.?$/,
       (m) => `${m[3]}-${m[2]}-${m[1]}`);
   },
+
+  // A buyer can have a second cellphone (Celular 2).
+  9: `
+    ALTER TABLE buyers ADD COLUMN phone2 TEXT; -- digits only; never set without phone
+  `,
+
+  // Each terrarium gets a code: its jar model's 3 letters and a number, e.g. FBL-0001. The shelf
+  // groups terrariums by the letters. Terrariums from before codes existed have none.
+  10: `
+    ALTER TABLE terrariums ADD COLUMN code TEXT;
+    CREATE UNIQUE INDEX idx_terrariums_code ON terrariums(code);
+  `,
+
+  // Jar lots get their model's 3 letters (e.g. FBL), which start the codes of the terrariums
+  // made from them. Lots of the same model share them.
+  11: `
+    ALTER TABLE jar_lots ADD COLUMN code TEXT;
+  `,
 };
 
 // Moves the first line of `notesColumn` matching `pattern` into `column` (its first group, or
@@ -211,26 +229,26 @@ function moveNoteLine(db, table, notesColumn, column, pattern, convert = (m) => 
 }
 
 // Columns the renderer is allowed to write. Anything else is ignored.
-// The sale's buyer is given as `buyer_name` + `buyer_phone` + `buyer_instagram` and resolved to `buyer_id`.
+// The sale's buyer is given as `buyer_name` + `buyer_phone` (+ `buyer_phone2`) + `buyer_instagram` and resolved to `buyer_id`.
 const EDITABLE = [
-  'name', 'size', 'container', 'lot_id', 'plants', 'made_on', 'cost_cents', 'price_cents', 'description', 'notes',
+  'code', 'name', 'size', 'container', 'lot_id', 'plants', 'made_on', 'cost_cents', 'price_cents', 'description', 'notes',
   'status', 'sold_on', 'sold_price_cents', 'buyer_id', 'channel', 'delivered_on', 'sale_notes',
 ];
 
 const LOT_EDITABLE = [
-  'collection', 'model', 'capacity_ml', 'lid', 'glass', 'dimensions', 'supplier', 'bought_on', 'quantity',
+  'code', 'collection', 'model', 'capacity_ml', 'lid', 'glass', 'dimensions', 'supplier', 'bought_on', 'quantity',
   'unit_cost_cents', 'lid_cost_cents', 'shipping_cents', 'price_cents', 'description', 'notes',
 ];
 
 const LIST_COLUMNS = `
-  t.id, t.name, t.size, t.container, t.lot_id, t.plants, t.made_on, t.cost_cents, t.price_cents,
+  t.id, t.code, t.name, t.size, t.container, t.lot_id, t.plants, t.made_on, t.cost_cents, t.price_cents,
   t.description, t.notes, t.status, t.sold_on, t.sold_price_cents, t.channel, t.delivered_on, t.sale_notes,
-  t.buyer_id, b.name AS buyer, b.phone AS buyer_phone, b.instagram AS buyer_instagram,
+  t.buyer_id, b.name AS buyer, b.phone AS buyer_phone, b.phone2 AS buyer_phone2, b.instagram AS buyer_instagram,
   t.created_at, t.updated_at, t.photo_version
 `;
 
 const LOT_COLUMNS = `
-  l.id, l.collection, l.model, l.capacity_ml, l.lid, l.glass, l.dimensions, l.supplier, l.bought_on,
+  l.id, l.code, l.collection, l.model, l.capacity_ml, l.lid, l.glass, l.dimensions, l.supplier, l.bought_on,
   l.quantity, l.unit_cost_cents, l.lid_cost_cents, l.shipping_cents, l.price_cents, l.description, l.notes,
   (SELECT count(*) FROM terrariums t WHERE t.lot_id = l.id) AS used,
   l.created_at, l.updated_at
@@ -330,6 +348,7 @@ class Store {
     return this.transaction(() => {
       const row = outcomeFields(clean(this.withBuyer(data)));
       if (!row.name) throw new Error('O terrário precisa de um nome.');
+      this.checkCode(row.code, null);
       this.checkLot(row.lot_id, null);
       const cols = Object.keys(row);
       const result = this.db
@@ -343,6 +362,7 @@ class Store {
     return this.transaction(() => {
       const row = outcomeFields(clean(this.withBuyer(data)));
       if ('name' in row && !row.name) throw new Error('O terrário precisa de um nome.');
+      if ('code' in row) this.checkCode(row.code, id);
       if ('lot_id' in row) this.checkLot(row.lot_id, id);
       const cols = Object.keys(row);
       if (cols.length) {
@@ -371,6 +391,14 @@ class Store {
       delivered_on: outcome.delivered_on,
       sale_notes: outcome.sale_notes,
     });
+  }
+
+  // A code is 3 letters and 4 numbers (FBL-0001), and no two terrariums share one.
+  checkCode(code, terrariumId) {
+    if (code == null) return;
+    if (!CODE_PATTERN.test(code)) throw new Error(`“${code}” não é um código válido: use 3 letras e 4 números, como FBL-0001.`);
+    const clash = this.db.prepare('SELECT name FROM terrariums WHERE code = ? AND id IS NOT ?').get(code, terrariumId);
+    if (clash) throw new Error(`O código ${code} já é do terrário “${clash.name}”.`);
   }
 
   // Each jar makes one terrarium: a lot with no jars left can't be picked, unless this
@@ -450,7 +478,7 @@ class Store {
   // ---- buyers -----------------------------------------------------------
 
   listBuyers() {
-    return this.db.prepare('SELECT id, name, phone, instagram, notes, created_at FROM buyers ORDER BY name COLLATE NOCASE').all();
+    return this.db.prepare('SELECT id, name, phone, phone2, instagram, notes, created_at FROM buyers ORDER BY name COLLATE NOCASE').all();
   }
 
   updateBuyer(id, data) {
@@ -458,9 +486,10 @@ class Store {
     if (!name) throw new Error('O comprador precisa de um nome.');
     const clash = this.findBuyer(name);
     if (clash && clash.id !== id) throw new Error(`Já existe um comprador chamado “${clash.name}”.`);
+    const [phone, phone2] = phonePair(data.phone, data.phone2);
     this.db.prepare(`
-      UPDATE buyers SET name = ?, phone = ?, instagram = ?, notes = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(name, digits(data.phone), tidyInstagram(data.instagram), data.notes?.trim() || null, id);
+      UPDATE buyers SET name = ?, phone = ?, phone2 = ?, instagram = ?, notes = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(name, phone, phone2, tidyInstagram(data.instagram), data.notes?.trim() || null, id);
   }
 
   removeBuyer(id) {
@@ -470,32 +499,40 @@ class Store {
   // Same person whatever the capitalisation or extra spaces.
   findBuyer(name) {
     const key = foldName(name);
-    return this.db.prepare('SELECT id, name, phone, instagram FROM buyers').all().find((b) => foldName(b.name) === key);
+    return this.db.prepare('SELECT id, name, phone, phone2, instagram FROM buyers').all().find((b) => foldName(b.name) === key);
   }
 
   // Turns `buyer_name` / `buyer_phone` / `buyer_instagram` into a `buyer_id`, creating the
-  // buyer if they're new. A phone or Instagram typed for an existing buyer replaces theirs.
+  // buyer if they're new. A phone or Instagram typed for an existing buyer replaces theirs
+  // (a phone that's already their Celular 2 is left where it is). `buyer_phone2` (only the
+  // spreadsheet import gives one) fills in their Celular 2 if they have none.
   withBuyer(data) {
     if (!('buyer_name' in data)) return data;
-    const { buyer_name, buyer_phone, buyer_instagram, ...rest } = data;
+    const { buyer_name, buyer_phone, buyer_phone2, buyer_instagram, ...rest } = data;
     const name = tidyName(buyer_name);
     const phone = digits(buyer_phone);
+    const phone2 = digits(buyer_phone2);
     const instagram = tidyInstagram(buyer_instagram);
     if (!name) {
-      if (phone || instagram) throw new Error('Informe o nome do comprador.');
+      if (phone || phone2 || instagram) throw new Error('Informe o nome do comprador.');
       return { ...rest, buyer_id: null };
     }
     const existing = this.findBuyer(name);
     if (existing) {
-      if (phone && phone !== existing.phone) {
-        this.db.prepare("UPDATE buyers SET phone = ?, updated_at = datetime('now') WHERE id = ?").run(phone, existing.id);
+      const [first, second] = phonePair(
+        phone && phone !== existing.phone2 ? phone : existing.phone,
+        existing.phone2 ?? phone2,
+      );
+      if (first !== existing.phone || second !== existing.phone2) {
+        this.db.prepare("UPDATE buyers SET phone = ?, phone2 = ?, updated_at = datetime('now') WHERE id = ?").run(first, second, existing.id);
       }
       if (instagram && instagram !== existing.instagram) {
         this.db.prepare("UPDATE buyers SET instagram = ?, updated_at = datetime('now') WHERE id = ?").run(instagram, existing.id);
       }
       return { ...rest, buyer_id: existing.id };
     }
-    const result = this.db.prepare('INSERT INTO buyers (name, phone, instagram) VALUES (?, ?, ?)').run(name, phone, instagram);
+    const result = this.db.prepare('INSERT INTO buyers (name, phone, phone2, instagram) VALUES (?, ?, ?, ?)')
+      .run(name, ...phonePair(phone, phone2), instagram);
     return { ...rest, buyer_id: Number(result.lastInsertRowid) };
   }
 
@@ -623,6 +660,11 @@ class Store {
 // Columns holding whole numbers: money in cents, ids, millilitres and quantities.
 const INTEGER_COLUMN = /(_cents|_id|_ml)$|^quantity$/;
 
+// A terrarium's code: the jar model's 3 letters, a hyphen and 4 digits; a jar lot's, just the
+// letters. Stored in capitals.
+const CODE_PATTERN = /^[A-Z]{3}-\d{4}$/;
+const LOT_CODE_PATTERN = /^[A-Z]{3}$/;
+
 function clean(data, columns = EDITABLE) {
   const row = {};
   for (const key of columns) {
@@ -630,6 +672,7 @@ function clean(data, columns = EDITABLE) {
     let value = data[key];
     if (typeof value === 'string') value = value.trim();
     if (value === '' || value === undefined) value = null;
+    if (key === 'code' && value !== null) value = String(value).toUpperCase();
     if (INTEGER_COLUMN.test(key) && value !== null) {
       value = Math.round(Number(value));
       if (!Number.isFinite(value)) value = null;
@@ -654,6 +697,9 @@ function outcomeFields(row) {
 
 function checkLotRow(row) {
   if ('model' in row && !row.model) throw new Error('Informe o modelo do frasco.');
+  if (row.code != null && !LOT_CODE_PATTERN.test(row.code)) {
+    throw new Error(`“${row.code}” não serve como letras do frasco: use 3 letras, como FBL.`);
+  }
   if ('quantity' in row && !(row.quantity > 0)) {
     throw new Error(`Informe quantos “${row.model ?? 'frascos'}” foram comprados.`);
   }
@@ -662,6 +708,13 @@ function checkLotRow(row) {
 const tidyName = (name) => String(name ?? '').trim().replace(/\s+/g, ' ');
 const foldName = (name) => tidyName(name).toLocaleLowerCase('pt-BR');
 const digits = (phone) => String(phone ?? '').replace(/\D/g, '') || null;
+
+// A buyer's two phones as [phone, phone2], digits only: a second phone on its own becomes the
+// first, and one that repeats the first is dropped.
+function phonePair(first, second) {
+  const [phone = null, phone2 = null] = [...new Set([digits(first), digits(second)].filter(Boolean))];
+  return [phone, phone2];
+}
 
 // "@beltaparo" or a pasted profile link like "instagram.com/beltaparo/" → "beltaparo";
 // "@ana / @bia" → "ana / bia". A name is kept as typed.

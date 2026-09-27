@@ -56,7 +56,7 @@ const TABS = {
           : '',
       };
     },
-    search: (t) => [t.name, t.buyer, t.size, t.channel],
+    search: (t) => [t.code, t.name, t.buyer, t.size, t.channel],
     byChannel: true,
     empty: ['Nenhuma venda ainda', 'Quando vender um terrário, abra-o na prateleira e escolha “Marcar como vendido”.'],
     noun: ['venda', 'vendas'],
@@ -85,7 +85,7 @@ const TABS = {
       ],
       note: 'Terrários dados de presente, para publicidade ou para agradar um cliente.',
     }),
-    search: (t) => [t.name, t.buyer, t.channel, t.sale_notes],
+    search: (t) => [t.code, t.name, t.buyer, t.channel, t.sale_notes],
     byChannel: true,
     empty: ['Nenhuma cortesia', 'Para registrar um terrário dado de presente ou para publicidade, abra-o na prateleira e escolha “Doar”.'],
     noun: ['cortesia', 'cortesias'],
@@ -110,7 +110,7 @@ const TABS = {
       ],
       note: 'Terrários que morreram ou quebraram.',
     }),
-    search: (t) => [t.name, t.sale_notes],
+    search: (t) => [t.code, t.name, t.sale_notes],
     empty: ['Nenhuma perda', 'Se um terrário morrer ou quebrar, abra-o na prateleira e escolha “Registrar perda”.'],
     noun: ['perda', 'perdas'],
   },
@@ -220,7 +220,7 @@ export function mount(root) {
             : null),
         h('td', {}, h('span', { class: 'row-name' },
           jar(t, { size: 'jar-tiny' }),
-          h('span', {}, t.name, t.size ? h('small', {}, sizeLabel(t.size)) : null))),
+          h('span', {}, t.name, t.code || t.size ? h('small', {}, [t.code, sizeLabel(t.size)].filter(Boolean).join(' · ')) : null))),
         tab.cells(t),
       );
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter') showDetails(t.id); });

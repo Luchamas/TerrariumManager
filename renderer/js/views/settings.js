@@ -1,7 +1,9 @@
 import { h, toast, showError, openDialog } from '../ui.js';
 import { CURRENCIES, getCurrency, setCurrency, locale, money, plural } from '../format.js';
 import { state, reload } from '../state.js';
-import { exportFiles } from '../csv.js';
+
+// The `theme` setting; main.js applies it to the whole window.
+const THEMES = [['system', 'Igual ao Windows'], ['light', 'Claro'], ['dark', 'Escuro']];
 
 export function mount(root) {
   const currency = h('select', { id: 'currency' },
@@ -16,6 +18,22 @@ export function mount(root) {
       toast('Moeda alterada');
     } catch (err) { showError(err); }
   });
+
+  const themeChoices = THEMES.map(([value, label]) => {
+    const radio = h('input', { type: 'radio', name: 'theme', value });
+    radio.addEventListener('change', async () => {
+      try {
+        await window.api.settings.set('theme', value);
+        state.settings.theme = value;
+      } catch (err) { showError(err); }
+    });
+    return { radio, el: h('label', {}, radio, h('span', {}, label)) };
+  });
+  const showTheme = () => {
+    const theme = state.settings.theme ?? 'system';
+    for (const { radio } of themeChoices) radio.checked = radio.value === theme;
+  };
+  showTheme();
 
   const dataFile = h('code', { class: 'path' });
   const dataSize = h('span', {});
@@ -35,7 +53,7 @@ export function mount(root) {
   const action = (label, fn, cls = 'btn') => h('button', { type: 'button', class: cls, onclick: fn }, label);
 
   // The spreadsheet import is only offered until it's been done.
-  const importBox = h('div', {});
+  const importBox = h('div', { class: 'import-box' });
   function renderImport() {
     const at = state.settings.sheet_imported_at;
     importBox.replaceChildren(...(at
@@ -73,6 +91,15 @@ export function mount(root) {
     ),
 
     h('section', { class: 'panel settings' },
+      h('h2', { class: 'panel-title' }, 'Aparência'),
+      h('fieldset', { class: 'choice theme-choice' },
+        h('legend', {}, 'Tema'),
+        h('div', { class: 'segmented' }, themeChoices.map((c) => c.el)),
+      ),
+      h('p', { class: 'panel-sub' }, 'Igual ao Windows: fica claro ou escuro conforme o tema do computador.'),
+    ),
+
+    h('section', { class: 'panel settings' },
       h('h2', { class: 'panel-title' }, 'Seus dados'),
       h('p', {}, 'Tudo fica salvo neste computador, em um único arquivo:'),
       h('p', {}, dataFile, ' ', dataSize),
@@ -99,6 +126,7 @@ export function mount(root) {
             state.settings = await window.api.settings.get();
             if (state.settings.currency) setCurrency(state.settings.currency);
             currency.value = getCurrency();
+            showTheme();
             await reload();
             renderImport();
             await refreshInfo();
@@ -109,16 +137,7 @@ export function mount(root) {
     ),
 
     h('section', { class: 'panel settings' },
-      h('h2', { class: 'panel-title' }, 'Planilhas'),
-      h('p', {}, 'Salve os frascos, os terrários e os compradores em planilhas (arquivos CSV), que abrem no Excel ou no LibreOffice.'),
-      h('div', { class: 'button-row' },
-        action('Exportar planilhas (CSV)…', async () => {
-          try {
-            const folder = await window.api.data.exportCsv(exportFiles());
-            if (folder) toast(`Planilhas salvas em ${folder}`);
-          } catch (err) { showError(err); }
-        }),
-      ),
+      h('h2', { class: 'panel-title' }, 'Planilha'),
       importBox,
     ),
 

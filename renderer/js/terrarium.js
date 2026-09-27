@@ -8,6 +8,7 @@ import { SIZES, compareSizes, sizeLabel } from './sizes.js';
 import { containerOptions, compareContainers } from './containers.js';
 import { combobox } from './combobox.js';
 import { showLot, lotOptionLabel } from './jar-lot.js';
+import { codeInput, codeError, suggestCode } from './code.js';
 import {
   state, reload, profit as profitOf, STATUS_LABELS, leftShelf, lotById, lotCost, lotLabel, lotStock, channelOptions,
 } from './state.js';
@@ -72,6 +73,7 @@ export function showDetails(id) {
       t.status !== 'lost' ? fact('Entregue em', t.delivered_on ? date(t.delivered_on) : 'Ainda não entregue') : null,
       fact('De onde veio', t.channel),
       fact('Celular', t.buyer_phone && formatPhone(t.buyer_phone)),
+      fact('Celular 2', t.buyer_phone2 && formatPhone(t.buyer_phone2)),
       fact('Instagram', t.buyer_instagram && instagramLabel(t.buyer_instagram)),
       fact({ sold: 'Observações da venda', donated: 'Observações', lost: 'Motivo' }[t.status], t.sale_notes),
     ),
@@ -92,6 +94,7 @@ export function showDetails(id) {
     ),
     h('div', { class: 'drawer-body' },
       jar(t, { size: 'jar-large' }),
+      t.code ? h('p', { class: 'drawer-code' }, h('span', { class: 'code-tag' }, t.code)) : null,
       h('h2', { class: 'drawer-title' }, t.name),
       h('p', { class: 'drawer-sub' }, [sizeLabel(t.size), t.container].filter(Boolean).join(', ') || 'Sem tamanho ou recipiente informado'),
       t.status === 'personal'
@@ -205,6 +208,7 @@ function terrariumForm(t, { lot: startLot } = {}) {
   const input = (name, attrs = {}) => h('input', { name, type: 'text', autocomplete: 'off', ...attrs });
 
   const f = {
+    code: codeInput(t?.code),
     name: input('name', { value: t?.name ?? '', required: true, maxLength: 120 }),
     size: input('size', { value: t?.size ?? '', placeholder: 'Ex.: Pequeno, Médio, Grande' }),
     lot: lotSelect(t?.lot_id ?? null),
@@ -259,13 +263,27 @@ function terrariumForm(t, { lot: startLot } = {}) {
     }
     lotBefore = lot;
     syncLotHint();
+    suggest();
   }
   f.lot.addEventListener('change', pickLot);
+
+  // ---- code: follows the jar (or the Recipiente) until one is typed. A saved code never
+  // changes by itself; a terrarium from before codes existed gets a suggestion.
+  let suggested = '';
+  function suggest() {
+    if (t?.code) return;
+    if (f.code.value && f.code.value !== suggested) return;
+    suggested = suggestCode({ lot: lotById(Number(f.lot.value)), container: f.container.value }, t?.id ?? null);
+    f.code.value = suggested;
+  }
+  f.container.addEventListener('input', suggest);
+
   if (startLot != null) {
     f.lot.value = String(startLot);
     pickLot();
   }
   syncLotHint();
+  suggest();
 
   // ---- photo picker
   const preview = h('div', { class: 'jar jar-large photo-drop' });
@@ -355,9 +373,10 @@ function terrariumForm(t, { lot: startLot } = {}) {
         ),
         h('div', { class: 'fields-col' },
           h('div', { class: 'form-grid' },
-            field('Nome', f.name),
+            h('div', { class: 'span-2' }, field('Frasco do estoque', f.lot, 'Preenche o código, o recipiente, o custo, o preço e a descrição. O estoque diminui sozinho.')),
+            field('Código', f.code, '3 letras do modelo do frasco e 4 números'),
             field('Feito em', f.made_on),
-            h('div', { class: 'span-2' }, field('Frasco do estoque', f.lot, 'Preenche o recipiente, o custo, o preço e a descrição. O estoque diminui sozinho.')),
+            h('div', { class: 'span-2' }, field('Nome', f.name)),
             field('Tamanho', combobox(f.size, sizes)),
             field('Recipiente', combobox(f.container, containers)),
             costField,
@@ -403,17 +422,20 @@ function terrariumForm(t, { lot: startLot } = {}) {
     if (file) { e.preventDefault(); takeFile(file); }
   });
   dialog.addEventListener('close', () => { if (newPhoto?.url) URL.revokeObjectURL(newPhoto.url); });
-  f.name.focus();
+  (isNew ? f.code : f.name).focus();
 
   function collect() {
     let ok = true;
     const check = (el, message) => { setFieldError(el, message); if (message) ok = false; };
 
+    // New terrariums need a code, and a code once given can't be taken away.
+    check(f.code, codeError(f.code.value, { saved: t, lot: lotById(Number(f.lot.value)), required: isNew || !!t.code }));
     check(f.name, f.name.value.trim() ? null : 'Dê um nome ao terrário');
     const s = f.status.value;
     const out = s === 'sold' || s === 'donated' || s === 'lost';
     const hasBuyer = s === 'sold' || s === 'donated';
     const data = {
+      code: f.code.value,
       name: f.name.value,
       size: f.size.value,
       lot_id: f.lot.value ? Number(f.lot.value) : null,

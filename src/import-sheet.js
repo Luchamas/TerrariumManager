@@ -10,6 +10,7 @@
 // couldn't be settled for sure goes in `warnings`, for the user to review afterwards.
 
 const { excelDate } = require('./xlsx');
+const { assignCodes } = require('./codes');
 
 const LOTS = 'Frascos de vidro';
 const SALES = 'VENDIDOS';
@@ -172,9 +173,8 @@ function planImport(book, { today = new Date().toISOString().slice(0, 10) } = {}
     }
     if (!sale.raw.A && !map?.guess) warnings.push(`${ref}: sem data da compra. A venda ficou sem data.`);
 
-    const phone = digits(sale.raw.G);
-    const realPhone = phone && phone.length >= 10 && !/^9+$/.test(phone) ? phone : null;
-    if (sale.raw.G && !realPhone) skippedPhones += 1;
+    const phones = salePhones(sale.raw.G, `${ref}: celular`, warnings);
+    if (sale.raw.G && !phones.length) skippedPhones += 1;
     const instagram = tidy(sale.raw.H) === '//' ? null : tidy(sale.raw.H);
 
     const price = salePrice(sale.raw.E);
@@ -200,7 +200,8 @@ function planImport(book, { today = new Date().toISOString().slice(0, 10) } = {}
         sold_on: soldOn,
         sold_price_cents: donated ? null : shares[i],
         buyer_name: sale.client,
-        buyer_phone: realPhone,
+        buyer_phone: phones[0] ?? null,
+        buyer_phone2: phones[1] ?? null,
         buyer_instagram: sale.client ? instagram : null,
         channel: tidy(sale.raw.J),
         delivered_on: delivered,
@@ -286,6 +287,7 @@ function applyImport(store, plan) {
     for (const t of plan.terrariums) {
       store.create({ ...t.data, lot_id: t.lotRow ? lotIds.get(t.lotRow) : null });
     }
+    assignCodes(store);
     store.setSetting('sheet_imported_at', new Date().toISOString());
   });
 }
@@ -432,6 +434,23 @@ function salePrice(value) {
   return { cents: amount(discounted ? discounted[1] : text), courtesy: false, text };
 }
 
+// A phone cell: one number, or two separated by "/" (the second becomes the buyer's Celular 2).
+// A DDD typed twice, like "(16)16992026214", is fixed and noted; placeholders like
+// "(99) 999999999" or "//" aren't numbers.
+function salePhones(value, where, warnings) {
+  const phones = [];
+  for (const part of String(value ?? '').split(/[/;]/)) {
+    let number = digits(part);
+    if (number.length >= 12 && number.length <= 13 && number.slice(0, 2) === number.slice(2, 4)) {
+      number = number.slice(2);
+      warnings.push(`${where} “${tidy(part)}” foi lido como ${phoneText(number)} (DDD repetido).`);
+    }
+    if (number.length >= 10 && number.length <= 11 && !/^9+$/.test(number)) phones.push(number);
+  }
+  if (phones.length > 2) warnings.push(`${where}: só os dois primeiros números de “${tidy(value)}” foram importados.`);
+  return phones.slice(0, 2);
+}
+
 // A date cell: an Excel date, or dd/mm/yyyy typed as text. Obvious typos are fixed and noted.
 function saleDate(value, where, warnings) {
   if (value == null) return null;
@@ -538,6 +557,7 @@ function split(total, n) {
 
 const real = (c) => (c == null ? '–' : `R$ ${(c / 100).toFixed(2).replace('.', ',')}`);
 const br = (iso) => iso.split('-').reverse().join('/');
+const phoneText = (d) => `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}`;
 function validDate(iso) {
   const d = new Date(`${iso}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso;

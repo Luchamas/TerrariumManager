@@ -56,14 +56,16 @@ export function mount(root) {
       all.filter((b) => !q
         || b.name.toLocaleLowerCase(locale).includes(q)
         || b.instagram?.toLocaleLowerCase(locale).includes(q.replace(/^@/, ''))
-        || (qDigits && b.phone?.includes(qDigits))),
+        || (qDigits && (b.phone?.includes(qDigits) || b.phone2?.includes(qDigits)))),
       COLUMNS, filters.sort,
     );
 
     const rows = shown.slice(0, limit).map((b) => {
       const row = h('tr', { tabindex: 0, onclick: () => showBuyer(b.id) },
         h('td', {}, h('span', { class: 'buyer-name' }, b.name)),
-        h('td', { class: 'nowrap' }, b.phone ? formatPhone(b.phone) : h('span', { class: 'muted' }, '–')),
+        h('td', { class: 'nowrap' },
+          b.phone ? formatPhone(b.phone) : h('span', { class: 'muted' }, '–'),
+          b.phone2 ? h('span', { class: 'cell-sub' }, formatPhone(b.phone2)) : null),
         h('td', {}, b.instagram ? instagramLabel(b.instagram) : h('span', { class: 'muted' }, '–')),
         h('td', { class: 'num' }, b.purchases.length),
         h('td', { class: 'num strong' }, b.purchases.length ? money(b.total) : '–'),

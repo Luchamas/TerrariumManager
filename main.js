@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, nativeTheme, net, protocol, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -12,6 +12,8 @@ const DAILY_BACKUP_DELAY_MS = 5000; // after the window opens, so it never slows
 // Thumbnails are this many pixels on their short side: sharp in the app's biggest jar,
 // even on screens scaled to 150%.
 const THUMBNAIL_SIDE = 480;
+// The `theme` setting: follow Windows, or always light or dark.
+const THEMES = ['system', 'light', 'dark'];
 
 // `app://` serves the UI, `photo://` serves terrarium photos straight from the database.
 // `codeCache` lets Chromium keep the compiled JavaScript between launches, so the app
@@ -51,6 +53,7 @@ if (!app.requestSingleInstanceLock()) {
 
 function start() {
   store = new Store(dbFile(), { backupDir: backupDir(), makeThumbnail });
+  applyTheme();
   registerProtocols();
   registerIpc();
   if (app.isPackaged) Menu.setApplicationMenu(null);
@@ -72,6 +75,13 @@ function makeThumbnail(bytes) {
   return small.toJPEG(82);
 }
 
+// The UI's colours follow `prefers-color-scheme` (see renderer/styles.css), which Electron
+// answers from `themeSource`: the saved theme, or Windows' own when it's 'system'.
+function applyTheme() {
+  const theme = store.getSettings().theme;
+  nativeTheme.themeSource = THEMES.includes(theme) ? theme : 'system';
+}
+
 function reloadOnRendererChanges() {
   let timer;
   fs.watch(RENDERER_DIR, { recursive: true }, (_event, file) => {
@@ -91,7 +101,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     show: false,
-    backgroundColor: '#EEF2EC',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#141B17' : '#EEF2EC', // --bg in renderer/styles.css
     title: 'Terrarium Manager',
     icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
@@ -168,7 +178,10 @@ function registerIpc() {
   });
 
   handle('settings:get', () => store.getSettings());
-  handle('settings:set', (key, value) => store.setSetting(key, value));
+  handle('settings:set', (key, value) => {
+    store.setSetting(key, value);
+    if (key === 'theme') applyTheme();
+  });
 
   handle('data:info', () => {
     const backups = fs.existsSync(backupDir())
@@ -220,6 +233,7 @@ function registerIpc() {
     fs.mkdirSync(backupDir(), { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     await store.restoreFrom(source, path.join(backupDir(), `before-restore-${stamp}.db`));
+    applyTheme();
     return source;
   });
 
@@ -259,23 +273,6 @@ function registerIpc() {
     applyImport(store, plan);
     importPlans.clear();
     return { summary: plan.summary, warnings: plan.warnings };
-  });
-
-  // Saves the CSV files the renderer built (see renderer/js/csv.js) into a folder the user picks.
-  handle('data:exportCsv', async (files) => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Escolha a pasta onde salvar as planilhas',
-      defaultPath: app.getPath('documents'),
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    if (canceled || !filePaths.length) return null;
-    const folder = filePaths[0];
-    for (const { name, content } of files) {
-      if (!/^[a-z0-9-]+\.csv$/.test(name)) throw new Error(`Nome de arquivo inválido: ${name}`);
-      fs.writeFileSync(path.join(folder, name), content, 'utf8');
-    }
-    shell.showItemInFolder(path.join(folder, files[0].name));
-    return folder;
   });
 
   // Prints the catalog pages the renderer has placed in its print-only area (see exportPdf in
