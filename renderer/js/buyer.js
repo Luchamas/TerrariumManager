@@ -19,6 +19,7 @@ export function showBuyer(id) {
   const firstChannel = [...b.purchases, ...b.gifts]
     .filter((t) => t.channel)
     .sort((x, y) => (x.sold_on ?? '9').localeCompare(y.sold_on ?? '9') || x.id - y.id)[0]?.channel;
+  const phones = [b.phone, b.phone2].filter(Boolean);
   const missing = [!b.phone && 'celular', !b.instagram && 'Instagram'].filter(Boolean);
 
   openDialog('drawer buyer-drawer', (close) => [
@@ -30,16 +31,15 @@ export function showBuyer(id) {
       h('p', { class: 'drawer-sub' }, b.first ? `Cliente desde ${date(b.first)}` : 'Nenhuma compra registrada'),
 
       h('section', { class: 'contact' },
-        b.phone
-          ? [
-              h('p', { class: 'contact-phone' }, formatPhone(b.phone)),
+        phones.length
+          ? phones.map((phone) => h('div', { class: 'contact-number' },
+              h('p', { class: 'contact-phone' }, formatPhone(phone)),
               h('div', { class: 'button-row' },
-                canWhatsApp(b.phone)
-                  ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => window.api.contact.whatsapp(b.phone).catch(showError) }, 'Abrir no WhatsApp')
+                canWhatsApp(phone)
+                  ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => window.api.contact.whatsapp(phone).catch(showError) }, 'Abrir no WhatsApp')
                   : null,
-                h('button', { type: 'button', class: 'btn', onclick: () => copyPhone(b.phone) }, 'Copiar número'),
-              ),
-            ]
+                h('button', { type: 'button', class: 'btn', onclick: () => copyPhone(phone) }, 'Copiar número'),
+              )))
           : h('p', { class: 'contact-empty' }, 'Sem celular cadastrado.'),
         b.instagram
           ? h('div', { class: 'contact-instagram' },
@@ -118,6 +118,7 @@ export function editBuyer(id) {
   if (!b) return;
   const name = h('input', { type: 'text', name: 'name', value: b.name, autocomplete: 'off', maxLength: 120 });
   const phone = phoneInput('phone', b.phone);
+  const phone2 = phoneInput('phone2', b.phone2);
   const instagram = instagramInput('instagram', b.instagram);
   const notes = h('textarea', { name: 'notes', rows: 3, value: b.notes ?? '', placeholder: 'Ex.: prefere retirar no fim de semana' });
 
@@ -127,7 +128,8 @@ export function editBuyer(id) {
       h('div', { class: 'form-grid' },
         h('div', { class: 'span-2' }, field('Nome', name, 'Muda o nome em todas as vendas deste comprador')),
         field('Celular', phone),
-        field('Instagram', instagram),
+        field('Celular 2', phone2),
+        h('div', { class: 'span-2' }, field('Instagram', instagram)),
         h('div', { class: 'span-2' }, field('Observações', notes)),
       ),
       h('div', { class: 'modal-actions' },
@@ -138,12 +140,17 @@ export function editBuyer(id) {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const digits = phoneDigits(phone);
+      const digits2 = phoneDigits(phone2);
       setFieldError(name, name.value.trim() ? null : 'Dê um nome ao comprador');
-      setFieldError(phone, digits && digits.length < 10 ? 'Número incompleto: DDD + número' : null);
+      for (const [input, d] of [[phone, digits], [phone2, digits2]]) {
+        setFieldError(input, d && d.length < 10 ? 'Número incompleto: DDD + número' : null);
+      }
       const invalid = form.querySelector('[aria-invalid=true]');
       if (invalid) { invalid.focus(); return; }
       try {
-        await window.api.buyers.update(b.id, { name: name.value, phone: digits, instagram: instagram.value, notes: notes.value });
+        await window.api.buyers.update(b.id, {
+          name: name.value, phone: digits, phone2: digits2, instagram: instagram.value, notes: notes.value,
+        });
         await reload();
         close();
         toast('Comprador atualizado');

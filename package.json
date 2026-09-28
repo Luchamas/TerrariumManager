@@ -9,6 +9,7 @@
     "start": "electron .",
     "dev": "node scripts/dev.js",
     "icon": "electron scripts/make-icon.js",
+    "sheet-db": "node scripts/sheet-to-db.js",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable"
   },

@@ -40,7 +40,6 @@ contextBridge.exposeInMainWorld('api', {
     restore: call('data:restore'),
     importSheetPreview: call('data:importSheetPreview'),
     importSheetApply: call('data:importSheetApply'),
-    exportCsv: call('data:exportCsv'),
   },
   catalog: {
     export: call('catalog:export'),

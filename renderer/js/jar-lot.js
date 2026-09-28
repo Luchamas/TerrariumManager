@@ -6,6 +6,7 @@ import { moneyInput, moneyCents } from './money-input.js';
 import { combobox } from './combobox.js';
 import { state, reload, lotById, lotCost, lotStock, lotLabel } from './state.js';
 import { addDialog, showDetails, statusTag } from './terrarium.js';
+import { lettersInput, suggestLetters, lettersError } from './code.js';
 
 // ---- details --------------------------------------------------------------------
 
@@ -27,6 +28,7 @@ export function showLot(id) {
       h('button', { type: 'button', class: 'btn btn-quiet btn-icon', 'aria-label': 'Fechar', onclick: () => close() }, '✕'),
     ),
     h('div', { class: 'drawer-body' },
+      lot.code ? h('p', { class: 'drawer-code' }, h('span', { class: 'code-tag' }, lot.code)) : null,
       h('h2', { class: 'drawer-title' }, lotLabel(lot)),
       h('p', { class: 'drawer-sub' }, [lot.collection, lot.supplier, lot.bought_on && `comprado em ${date(lot.bought_on)}`].filter(Boolean).join(' · ') || 'Sem coleção ou fornecedor'),
 
@@ -52,7 +54,8 @@ export function showLot(id) {
             h('ul', { class: 'recent' }, made.map((t) => h('li', {},
               h('button', { type: 'button', class: 'recent-item', onclick: () => { close(); showDetails(t.id); } },
                 jar(t, { size: 'jar-tiny' }),
-                h('span', { class: 'recent-name' }, t.name, h('small', {}, t.made_on ? `Feito em ${date(t.made_on)}` : 'Sem data de montagem')),
+                h('span', { class: 'recent-name' }, t.name,
+                  h('small', {}, [t.code, t.made_on ? `Feito em ${date(t.made_on)}` : 'Sem data de montagem'].filter(Boolean).join(' · '))),
                 statusTag(t),
               )))),
           ]
@@ -152,6 +155,7 @@ export function purchaseDialog() {
   function addItem() {
     const it = {
       model: text('model', { placeholder: 'Ex.: Frasco boca larga' }),
+      code: lettersInput(''),
       capacity: whole('capacity_ml', null, { placeholder: 'mL' }),
       quantity: whole('quantity', 1),
       unit: moneyInput('unit_cost', null),
@@ -171,9 +175,20 @@ export function purchaseDialog() {
         refresh();
       },
     }, '✕');
+    // The model's letters follow what's typed as the model until they're typed themselves.
+    let suggested = '';
+    it.follow = () => {
+      if (it.code.value && it.code.value !== suggested) return;
+      suggested = suggestLetters(it.model.value, { capacity: wholeValue(it.capacity), pending: pendingBesides(it) });
+      it.code.value = suggested;
+    };
+    // Each capacity is a model of its own, so the letters follow it too.
+    const followAll = () => { for (const other of items) other.follow(); };
+    it.model.addEventListener('input', followAll);
+    it.capacity.addEventListener('input', followAll);
     it.el = h('div', { class: 'purchase-item' },
       h('div', { class: 'item-grid' },
-        h('div', { class: 'item-model' }, field('Frasco', combobox(it.model, s.models))),
+        h('div', { class: 'item-model' }, field('Frasco', combobox(it.model, s.models)), field('Sigla', it.code)),
         field('Capacidade (mL)', it.capacity),
         field('Quantidade', it.quantity),
         remove,
@@ -197,6 +212,14 @@ export function purchaseDialog() {
     refresh();
     return it;
   }
+
+  // Other jars of this purchase, whose letters count as taken: all of them for suggestions; for
+  // checking, the ones above, so a clash is shown on the later jar only.
+  const pending = (list) => list.map((other) => ({
+    model: other.model.value, capacity: wholeValue(other.capacity), code: other.code.value,
+  }));
+  const pendingBesides = (it) => pending(items.filter((other) => other !== it));
+  const pendingAbove = (it) => pending(items.slice(0, items.indexOf(it)));
 
   // Shipping per jar and cost per jar of every item, from what's typed so far.
   function refresh() {
@@ -227,7 +250,8 @@ export function purchaseDialog() {
   const dialog = openDialog('modal purchase-modal', (close) => {
     const form = h('form', { class: 'modal-body', novalidate: true },
       h('h2', { class: 'modal-title' }, 'Registrar compra de frascos'),
-      h('p', { class: 'modal-text' }, 'Cada tipo de frasco vira um lote no estoque. O frete do pedido é dividido entre os frascos.'),
+      h('p', { class: 'modal-text' }, 'Cada tipo de frasco vira um lote no estoque. O frete do pedido é dividido entre os frascos. '
+        + 'A sigla (3 letras do modelo) abre o código dos terrários feitos com ele.'),
       h('div', { class: 'form-grid purchase-head' },
         field('Local da compra', combobox(head.supplier, s.suppliers)),
         field('Data da compra', head.bought_on),
@@ -257,9 +281,11 @@ export function purchaseDialog() {
       for (const it of items) {
         const missingModel = !it.model.value.trim();
         const badQty = !(wholeValue(it.quantity) > 0);
+        const badCode = !missingModel && lettersError(it.code.value, it.model.value, { capacity: wholeValue(it.capacity), pending: pendingAbove(it) });
         setFieldError(it.model, missingModel ? 'Qual é o frasco?' : null);
+        setFieldError(it.code, badCode || null);
         setFieldError(it.quantity, badQty ? 'Quantos?' : null);
-        if (missingModel || badQty) ok = false;
+        if (missingModel || badQty || badCode) ok = false;
       }
       if (!ok) { form.querySelector('[aria-invalid=true]')?.focus(); return; }
       refresh();
@@ -268,6 +294,7 @@ export function purchaseDialog() {
         supplier: head.supplier.value,
         bought_on: head.bought_on.value,
         model: it.model.value,
+        code: it.code.value,
         capacity_ml: wholeValue(it.capacity),
         quantity: wholeValue(it.quantity),
         unit_cost_cents: moneyCents(it.unit),
@@ -306,6 +333,7 @@ export function lotForm(lot) {
   const s = suggestions();
   const f = {
     model: text('model', { value: lot.model }),
+    code: lettersInput(lot.code ?? suggestLetters(lot.model, { capacity: lot.capacity_ml, lotId: lot.id })),
     capacity: whole('capacity_ml', lot.capacity_ml),
     quantity: whole('quantity', lot.quantity),
     collection: text('collection', { value: lot.collection ?? '' }),
@@ -331,7 +359,7 @@ export function lotForm(lot) {
     const form = h('form', { class: 'modal-body', novalidate: true },
       h('h2', { class: 'modal-title' }, `Editar “${lotLabel(lot)}”`),
       h('div', { class: 'form-grid lot-grid' },
-        h('div', { class: 'span-2' }, field('Frasco', combobox(f.model, s.models))),
+        h('div', { class: 'span-2 item-model' }, field('Frasco', combobox(f.model, s.models)), field('Sigla', f.code)),
         field('Capacidade (mL)', f.capacity),
         field('Quantidade comprada', f.quantity, lot.used ? `${plural(lot.used, 'já virou terrário', 'já viraram terrários')}` : null),
         field('Coleção ou lote', combobox(f.collection, s.collections)),
@@ -358,6 +386,7 @@ export function lotForm(lot) {
       e.preventDefault();
       const qty = wholeValue(f.quantity);
       setFieldError(f.model, f.model.value.trim() ? null : 'Qual é o frasco?');
+      setFieldError(f.code, f.model.value.trim() ? lettersError(f.code.value, f.model.value, { capacity: wholeValue(f.capacity), lotId: lot.id }) : null);
       setFieldError(f.quantity, !(qty > 0) ? 'Quantos foram comprados?'
         : qty < lot.used ? `Pelo menos ${lot.used}: é quantos já viraram terrários` : null);
       const invalid = form.querySelector('[aria-invalid=true]');
@@ -365,6 +394,7 @@ export function lotForm(lot) {
       try {
         await window.api.jars.update(lot.id, {
           model: f.model.value,
+          code: f.code.value,
           capacity_ml: wholeValue(f.capacity),
           quantity: qty,
           collection: f.collection.value,
@@ -396,5 +426,5 @@ export function lotForm(lot) {
 // "Frasco boca larga 250 mL — Lojalab (2 em estoque)".
 export function lotOptionLabel(lot) {
   const stock = lotStock(lot);
-  return `${lotLabel(lot)}${lot.supplier ? ` — ${lot.supplier}` : ''} (${stock > 0 ? `${stock} em estoque` : 'sem estoque'})`;
+  return `${lot.code ? `${lot.code} · ` : ''}${lotLabel(lot)}${lot.supplier ? ` — ${lot.supplier}` : ''} (${stock > 0 ? `${stock} em estoque` : 'sem estoque'})`;
 }

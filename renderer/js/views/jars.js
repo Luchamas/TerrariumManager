@@ -10,7 +10,7 @@ const filters = { query: '', collection: '', inStock: false, sort: { key: 'bough
 
 const COLUMNS = [
   { key: 'collection', label: 'Coleção', value: (l) => l.collection ?? '' },
-  { key: 'jar', label: 'Frasco', value: (l) => lotLabel(l) },
+  { key: 'jar', label: 'Frasco', value: (l) => `${l.code ?? ''} ${lotLabel(l)}` },
   { key: 'supplier', label: 'Fornecedor', value: (l) => l.supplier ?? '' },
   { key: 'bought_on', label: 'Comprado em', desc: true, value: (l) => l.bought_on ?? '' },
   { key: 'quantity', label: 'Qtd', num: true, desc: true, value: (l) => l.quantity },
@@ -21,7 +21,7 @@ const COLUMNS = [
 
 export function mount(root) {
   const search = h('input', {
-    type: 'search', class: 'search', placeholder: 'Buscar por frasco, fornecedor, coleção…', value: filters.query,
+    type: 'search', class: 'search', placeholder: 'Buscar por sigla, frasco, fornecedor, coleção…', value: filters.query,
     'aria-label': 'Buscar frascos', dataset: { shortcut: 'search' },
   });
   const collectionSelect = h('select', { 'aria-label': 'Filtrar por coleção' });
@@ -81,7 +81,7 @@ export function mount(root) {
       all
         .filter((l) => !filters.collection || l.collection === filters.collection)
         .filter((l) => !filters.inStock || lotStock(l) > 0)
-        .filter((l) => !q || [lotLabel(l), l.supplier, l.collection, l.lid, l.glass, l.description, l.notes]
+        .filter((l) => !q || [l.code, lotLabel(l), l.supplier, l.collection, l.lid, l.glass, l.description, l.notes]
           .some((v) => v?.toLocaleLowerCase(locale).includes(q))),
       COLUMNS, filters.sort,
     );
@@ -90,7 +90,9 @@ export function mount(root) {
       const stock = lotStock(l);
       const row = h('tr', { tabindex: 0, onclick: () => showLot(l.id) },
         h('td', {}, l.collection ?? h('span', { class: 'muted' }, '–')),
-        h('td', {}, h('span', { class: 'lot-name' }, lotLabel(l), l.lid ? h('small', {}, `Tampa: ${l.lid}`) : null)),
+        h('td', {}, h('span', { class: 'lot-name' },
+          l.code ? [h('span', { class: 'code-tag' }, l.code), ' '] : null,
+          lotLabel(l), l.lid ? h('small', {}, `Tampa: ${l.lid}`) : null)),
         h('td', {}, l.supplier ?? ''),
         h('td', { class: 'nowrap' }, date(l.bought_on)),
         h('td', { class: 'num' }, l.quantity),
